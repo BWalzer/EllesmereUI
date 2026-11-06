@@ -115,6 +115,56 @@ do
     end
 end
 
+-- Health Colored Background (Health Bar Fill cog; off by default): the bar
+-- background blends through its own three stops (bgDynamicColor100/50/0) as
+-- health changes, the background twin of Custom Dynamic Colors. Same engine
+-- curve path (secret-safe), cached and rebuilt only when a stop changes.
+do
+    local DEF100 = { r = 17/255, g = 17/255, b = 17/255 }
+    local DEF50  = { r = 0x5A/255, g = 0x46/255, b = 0x10/255 }
+    local DEF0   = { r = 0x6E/255, g = 0x12/255, b = 0x12/255 }
+    local bgCurve
+    local r0, g0, b0, r50, g50, b50, r100, g100, b100
+    function ns.GetBgDynamicCurve(s)
+        s = s or db.profile
+        local c0   = s.bgDynamicColor0   or DEF0
+        local c50  = s.bgDynamicColor50  or DEF50
+        local c100 = s.bgDynamicColor100 or DEF100
+        if not (bgCurve
+            and r0   == c0.r   and g0   == c0.g   and b0   == c0.b
+            and r50  == c50.r  and g50  == c50.g  and b50  == c50.b
+            and r100 == c100.r and g100 == c100.g and b100 == c100.b) then
+            bgCurve = C_CurveUtil.CreateColorCurve()
+            bgCurve:SetType(Enum.LuaCurveType.Linear)
+            bgCurve:AddPoint(0,   CreateColor(c0.r,   c0.g,   c0.b,   1))
+            bgCurve:AddPoint(0.5, CreateColor(c50.r,  c50.g,  c50.b,  1))
+            bgCurve:AddPoint(1,   CreateColor(c100.r, c100.g, c100.b, 1))
+            r0, g0, b0       = c0.r, c0.g, c0.b
+            r50, g50, b50    = c50.r, c50.g, c50.b
+            r100, g100, b100 = c100.r, c100.g, c100.b
+        end
+        return bgCurve
+    end
+
+    -- Clean-number twin for previews (fake 0-1 percents).
+    function ns.ResolveBgDynamicColor(s, pct01)
+        s = s or db.profile
+        local c0   = s.bgDynamicColor0   or DEF0
+        local c50  = s.bgDynamicColor50  or DEF50
+        local c100 = s.bgDynamicColor100 or DEF100
+        if pct01 >= 0.5 then
+            local t = (pct01 - 0.5) * 2
+            return c50.r + (c100.r - c50.r) * t,
+                   c50.g + (c100.g - c50.g) * t,
+                   c50.b + (c100.b - c50.b) * t
+        end
+        local t = pct01 * 2
+        return c0.r + (c50.r - c0.r) * t,
+               c0.g + (c50.g - c0.g) * t,
+               c0.b + (c50.b - c0.b) * t
+    end
+end
+
 -- Class Color Reactive: the Custom Dynamic gradient whose 100% stop is the
 -- unit's CLASS color -- full health reads as class identity, wounds bleed
 -- into the reactive palette, fully reactive by 40%. One engine curve cached
@@ -393,6 +443,19 @@ function ns._ApplyHealthBg(d, health, s, unit, connected, deadOrGhost)
         end
     end
     local br, bgr, bb, ba
+    if s.bgHealthColored and s.healthColorMode ~= "dark" then
+        -- Health Colored Background: recolors with health, so it paints every
+        -- tick (the curve's RGB can be secret -- never compared or stamped,
+        -- handed straight to SetColorTexture, as the curve fill modes do).
+        -- Stamps cleared so turning it off repaints the static color.
+        d._bgR, d._bgG, d._bgB, d._bgA = nil, nil, nil, nil
+        local color = UnitHealthPercent(unit, true, ns.GetBgDynamicCurve(s))
+        if color and color.GetRGB then
+            local r, g, b = color:GetRGB()
+            bg:SetColorTexture(r, g, b, (s.bgDarkness or 50) / 100)
+        end
+        return
+    end
     if s.healthColorMode == "dark" then
         br, bgr, bb, ba = EllesmereUI.GetDarkModeBg()
     else

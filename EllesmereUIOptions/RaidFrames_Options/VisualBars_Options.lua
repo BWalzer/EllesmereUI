@@ -153,6 +153,11 @@ local function BuildVisualBars(parent, y, W, onSection, EYE)
                                 local r, g, b = ns.ResolveClassReactiveColor(s, f._classToken, st.current / 100)
                                 f._health:SetStatusBarColor(r, g, b, (s.healthBarOpacity or 100) / 100)
                             end
+                            -- Health Colored Background follows the same fake percent.
+                            if s.bgHealthColored and s.healthColorMode ~= "dark" and f._bg then
+                                local r, g, b = ns.ResolveBgDynamicColor(s, st.current / 100)
+                                f._bg:SetColorTexture(r, g, b, (s.bgDarkness or 50) / 100)
+                            end
                         end -- snapTimer ready
                     end
                 end
@@ -275,6 +280,11 @@ local function BuildVisualBars(parent, y, W, onSection, EYE)
                   get=function() return SVal("healthInvertFill", false) end,
                   set=function(v) SSet("healthInvertFill", v) end }),
                 TexBgRowCfg(SVal, SSet),
+                { type="toggle", label="Health Colored Background",
+                  tooltip="The bar background blends between three colors you pick (full, half and empty health) as the unit takes damage or is healed. The colors replace the Background swatches. Not available in Dark Mode.",
+                  get=function() return SVal("bgHealthColored", false) end,
+                  -- RefreshPage swaps the Background row's swatches.
+                  set=function(v) SSet("bgHealthColored", v); EllesmereUI:RefreshPage() end },
             },
         })
     end
@@ -429,8 +439,45 @@ local function BuildVisualBars(parent, y, W, onSection, EYE)
         bgBlock:EnableMouse(true)
         bgBlock:SetScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(bgSwatch, "Not available in Dark Mode. Dark Mode colors can be adjusted in Global Settings -> Colors.") end)
         bgBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+        -- Health Colored Background stops (100/50/0%), built right-to-left over the
+        -- Custom + Class pair's slot; shown instead of that pair while the cog toggle is on.
+        local bgDynDefs = {
+            { key = "bgDynamicColor100", def = { r = 17/255, g = 17/255, b = 17/255 },       tip = "Background color at full (100%) health" },
+            { key = "bgDynamicColor50",  def = { r = 0x5A/255, g = 0x46/255, b = 0x10/255 }, tip = "Background color at half (50%) health" },
+            { key = "bgDynamicColor0",   def = { r = 0x6E/255, g = 0x12/255, b = 0x12/255 }, tip = "Background color at empty (0%) health" },
+        }
+        local bgDynSwatches = {}
+        local bgPrev = rgn._control
+        for i = #bgDynDefs, 1, -1 do
+            local dd = bgDynDefs[i]
+            local sw = EllesmereUI.BuildColorSwatch(
+                rgn, row:GetFrameLevel() + 3,
+                function()
+                    local c = SGet(dd.key) or dd.def
+                    return c.r, c.g, c.b, 1
+                end,
+                function(r, g, b)
+                    SWrite(dd.key, { r=r, g=g, b=b })
+                    ReloadAndUpdate()
+                end, false, 18)
+            sw:SetPoint("RIGHT", bgPrev, "LEFT", (bgPrev == rgn._control) and -8 or -6, 0)
+            sw:HookScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(sw, dd.tip) end)
+            sw:HookScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            bgDynSwatches[i] = sw
+            bgPrev = sw
+        end
         local function UpdateBgSwatchVis()
-            if SVal("healthColorMode", "class") == "dark" then
+            local dark = SVal("healthColorMode", "class") == "dark"
+            local healthBg = SVal("bgHealthColored", false) and not dark
+            for _, sw in ipairs(bgDynSwatches) do
+                if healthBg then sw:Show() else sw:Hide() end
+            end
+            if healthBg then
+                bgSwatch:Hide(); bgClassSwatch:Hide(); bgBlock:Hide()
+                return
+            end
+            bgSwatch:Show(); bgClassSwatch:Show()
+            if dark then
                 bgSwatch:SetAlpha(0.3); bgClassSwatch:SetAlpha(0.3); bgBlock:Show()
             else
                 bgBlock:Hide()

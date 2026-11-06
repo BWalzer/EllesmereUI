@@ -438,6 +438,12 @@ local defaults = {
         customBgColor    = { r = 17/255, g = 17/255, b = 17/255 },
         bgClassColored   = false,
         bgDarkness       = 50,
+        -- Health Colored Background (Health Bar Fill cog): the background blends
+        -- through its own stops with health. Off by default; wins over class/custom.
+        bgHealthColored   = false,
+        bgDynamicColor100 = { r = 17/255, g = 17/255, b = 17/255 },          -- full health
+        bgDynamicColor50  = { r = 0x5A/255, g = 0x46/255, b = 0x10/255 },    -- half health
+        bgDynamicColor0   = { r = 0x6E/255, g = 0x12/255, b = 0x12/255 },    -- empty health
         -- Fill axis: off = left-to-right, on = bottom-to-top. Party can hold its own (key is in the healthBar override section).
         healthVerticalFill = false,
         -- Invert health fill: when true the bar is full at low health and empty at high health.

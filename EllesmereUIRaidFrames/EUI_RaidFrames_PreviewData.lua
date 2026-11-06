@@ -178,7 +178,10 @@ local function ApplyPreviewData(f, index, roles, classTokens)
             AnchorPreviewBg()
             local bgA = (s.bgDarkness or 50) / 100
             local cc = s.bgClassColored and classToken and EllesmereUI.GetClassColor(classToken)
-            if cc then
+            if s.bgHealthColored then
+                local r, g, b = ns.ResolveBgDynamicColor(s, healthPct / 100)
+                f._bg:SetColorTexture(r, g, b, bgA)
+            elseif cc then
                 f._bg:SetColorTexture(cc.r, cc.g, cc.b, bgA)
             else
                 local bgc = s.customBgColor or defaults.customBgColor

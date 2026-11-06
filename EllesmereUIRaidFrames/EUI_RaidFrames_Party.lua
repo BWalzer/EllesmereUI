@@ -82,6 +82,7 @@ do
             "healthBarTexture", "healthBarOpacity", "healthColorMode",
             "customFillColor", "dynamicColor100", "dynamicColor50", "dynamicColor0",
             "customBgColor", "bgClassColored", "bgDarkness", "smoothBars",
+            "bgHealthColored", "bgDynamicColor100", "bgDynamicColor50", "bgDynamicColor0",
             "healPrediction", "healPredOpacity", "healPredColor",
             "healthVerticalFill", "healthInvertFill",
             "textureBg",
