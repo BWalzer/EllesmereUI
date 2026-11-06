@@ -363,7 +363,10 @@ function ns.UFO_BuildUnitPreview(parent, unitKey, side)
             local _, ct = UnitClass("player")
             bgClassCC = ct and EllesmereUI.GetClassColor(ct)
         end
-        if bgClassCC then
+        local pvBgR, pvBgG, pvBgB = ns.UF_PreviewBgHealthColor(settings, optState._previewHealthPct or 0.70)
+        if pvBgR then
+            bgR, bgG, bgB = pvBgR, pvBgG, pvBgB
+        elseif bgClassCC then
             bgR, bgG, bgB = bgClassCC.r, bgClassCC.g, bgClassCC.b
         else
             local cBg = settings.customBgColor
@@ -2460,7 +2463,10 @@ function ns.UFO_BuildUnitPreview(parent, unitKey, side)
                     local _, ct = UnitClass("player")
                     uBgClassCC = ct and EllesmereUI.GetClassColor(ct)
                 end
-                if uBgClassCC then
+                local uPvBgR, uPvBgG, uPvBgB = ns.UF_PreviewBgHealthColor(s, optState._previewHealthPct or 0.70)
+                if uPvBgR then
+                    uBgR, uBgG, uBgB = uPvBgR, uPvBgG, uPvBgB
+                elseif uBgClassCC then
                     uBgR, uBgG, uBgB = uBgClassCC.r, uBgClassCC.g, uBgClassCC.b
                 else
                     local cBg = s.customBgColor

@@ -2118,6 +2118,66 @@ do
                c0.b + (c50.b - c0.b) * t
     end
 
+    -- Health Colored Background (Bar Background cog; per-unit, nil = off): the
+    -- background blends through its own stops (bgDynamicColor100/50/0) with
+    -- health, the background twin of Custom Colors. Port of the Raid Frames
+    -- option with the same stop defaults. One cached curve, keyed like
+    -- GetDynamicCurve above.
+    local BGDEF100 = { r = 17/255, g = 17/255, b = 17/255 }
+    local BGDEF50  = { r = 0x5A/255, g = 0x46/255, b = 0x10/255 }
+    local BGDEF0   = { r = 0x6E/255, g = 0x12/255, b = 0x12/255 }
+    ns.UF_BGDYN_DEF100, ns.UF_BGDYN_DEF50, ns.UF_BGDYN_DEF0 = BGDEF100, BGDEF50, BGDEF0
+    local bgCurve
+    local b0r, b0g, b0b, b50r, b50g, b50b, b100r, b100g, b100b
+    local function GetBgCurve(s)
+        local c0   = s.bgDynamicColor0   or BGDEF0
+        local c50  = s.bgDynamicColor50  or BGDEF50
+        local c100 = s.bgDynamicColor100 or BGDEF100
+        if not (bgCurve
+            and b0r   == c0.r   and b0g   == c0.g   and b0b   == c0.b
+            and b50r  == c50.r  and b50g  == c50.g  and b50b  == c50.b
+            and b100r == c100.r and b100g == c100.g and b100b == c100.b) then
+            bgCurve = C_CurveUtil.CreateColorCurve()
+            bgCurve:SetType(Enum.LuaCurveType.Linear)
+            bgCurve:AddPoint(0,   CreateColor(c0.r,   c0.g,   c0.b,   1))
+            bgCurve:AddPoint(0.5, CreateColor(c50.r,  c50.g,  c50.b,  1))
+            bgCurve:AddPoint(1,   CreateColor(c100.r, c100.g, c100.b, 1))
+            b0r, b0g, b0b       = c0.r, c0.g, c0.b
+            b50r, b50g, b50b    = c50.r, c50.g, c50.b
+            b100r, b100g, b100b = c100.r, c100.g, c100.b
+        end
+        return bgCurve
+    end
+
+    -- Returns ok, r, g, b; ok is a PLAIN boolean (r/g/b may be secret and may
+    -- only be handed to a setter -- SetColorTexture accepts them).
+    function ns.UF_BgHealthColor(unit, s)
+        if not (s and s.bgHealthColored and unit) then return false end
+        if not (C_CurveUtil and UnitHealthPercent) then return false end
+        local color = UnitHealthPercent(unit, true, GetBgCurve(s))
+        if not (color and color.GetRGB) then return false end
+        local r, g, b = color:GetRGB()
+        return true, r, g, b
+    end
+
+    -- Clean-number twin for the previews (fake 0-1 percent); nil when off.
+    function ns.UF_PreviewBgHealthColor(s, pct01)
+        if not (s and s.bgHealthColored) then return nil end
+        local c0   = s.bgDynamicColor0   or BGDEF0
+        local c50  = s.bgDynamicColor50  or BGDEF50
+        local c100 = s.bgDynamicColor100 or BGDEF100
+        if pct01 >= 0.5 then
+            local t = (pct01 - 0.5) * 2
+            return c50.r + (c100.r - c50.r) * t,
+                   c50.g + (c100.g - c50.g) * t,
+                   c50.b + (c100.b - c50.b) * t
+        end
+        local t = pct01 * 2
+        return c0.r + (c50.r - c0.r) * t,
+               c0.g + (c50.g - c0.g) * t,
+               c0.b + (c50.b - c0.b) * t
+    end
+
     -- One entry point for every preview surface: resolves whichever dynamic mode
     -- `s` is on at a FAKE percent, or nil when the unit is on a flat fill.
     function ns.UF_PreviewDynamicColor(s, pct01)
@@ -2341,12 +2401,17 @@ local function ApplyDarkTheme(health, unit)
             end
             if self.bg then
                 AnchorHealthBg(self)
+                -- Health Colored Background outranks the flat class/custom bg.
+                local bgDynOk, bgDynR, bgDynG, bgDynB = ns.UF_BgHealthColor(unit or self._euiUnit, uSettings)
                 local bgClassOk, bgClassR, bgClassG, bgClassB
-                if bgClassColored then
+                if bgClassColored and not bgDynOk then
                     local classUnit = ClassColorSourceUnit(uKey, unit or self._euiUnit or uKey)
                     bgClassOk, bgClassR, bgClassG, bgClassB = ns.ResolveBgClassColor(classUnit)
                 end
-                if bgClassOk then
+                if bgDynOk then
+                    -- Opacity comes from customBgAlpha (SetAlpha), as for class.
+                    self.bg:SetColorTexture(bgDynR, bgDynG, bgDynB, 1)
+                elseif bgClassOk then
                     -- Full class color; opacity comes from customBgAlpha (SetAlpha).
                     self.bg:SetColorTexture(bgClassR, bgClassG, bgClassB, 1)
                 elseif cBg then

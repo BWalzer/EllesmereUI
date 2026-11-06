@@ -286,21 +286,97 @@ function ns.UFO_BuildHealthBarSection(parent, y, ctx)
             bgSw:SetAlpha(SVal("bgClassColored", false) and 0.3 or 1)
         end)
         bgSw:SetAlpha(SVal("bgClassColored", false) and 0.3 or 1)
+
+        -- Health Colored Background: cog toggle, then its three stop swatches
+        -- (100% | 50% | 0%) chained LEFT of the cog at the far end of the run,
+        -- as on Bar Color. While on, the flat Custom/Class pair is dimmed and
+        -- click-blocked (stored values untouched), as Dynamic Color does there.
+        EllesmereUI.BuildInlineCog(rgn, {
+            title = "Background Color Settings",
+            rows = {
+                { type="toggle", label="Health Colored Background",
+                  tooltip="The bar background blends between the three stop swatches on this row -- full (100%), half (50%) and empty (0%) health -- as the unit takes damage or is healed, instead of the flat Custom/Class color. Bar Background still sets its opacity.",
+                  get=function() return SVal("bgHealthColored", false) end,
+                  -- RefreshPage re-runs the stop swatches' show/hide pass.
+                  set=function(v) SSet("bgHealthColored", v); ReloadAndUpdate(); UpdatePreview(); EllesmereUI:RefreshPage() end },
+            },
+        })
+        local bgDynDefs = {
+            { key = "bgDynamicColor100", def = ns.UF_BGDYN_DEF100, tip = "Background color at full (100%) health" },
+            { key = "bgDynamicColor50",  def = ns.UF_BGDYN_DEF50,  tip = "Background color at half (50%) health" },
+            { key = "bgDynamicColor0",   def = ns.UF_BGDYN_DEF0,   tip = "Background color at empty (0%) health" },
+        }
+        local bgDynSwatches, bgDynUpdaters = {}, {}
+        local bgPrev = rgn._lastInline or rgn._control
+        for i = #bgDynDefs, 1, -1 do
+            local dd = bgDynDefs[i]
+            local sw, swUpdate = EllesmereUI.BuildColorSwatch(
+                rgn, rgn:GetFrameLevel() + 5,
+                function()
+                    local c = SGet(dd.key) or dd.def
+                    return c.r, c.g, c.b, 1
+                end,
+                function(r, g, b)
+                    UNIT_DB_MAP[optState.selectedUnit]()[dd.key] = { r=r, g=g, b=b }
+                    ReloadAndUpdate(); UpdatePreview()
+                end, false, 18)
+            sw:SetPoint("RIGHT", bgPrev, "LEFT", -8, 0)
+            sw:HookScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(sw, dd.tip) end)
+            sw:HookScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+            bgDynSwatches[i] = sw
+            bgDynUpdaters[i] = swUpdate
+            bgPrev = sw
+        end
+        rgn._lastInline = bgPrev
+        -- Blocker over the flat pair while Health Colored Background is on.
+        local bgFlatBlock = CreateFrame("Frame", nil, rgn)
+        bgFlatBlock:SetPoint("TOPLEFT", bgSw, "TOPLEFT", 0, 0)
+        bgFlatBlock:SetPoint("BOTTOMRIGHT", bgClassSw, "BOTTOMRIGHT", 0, 0)
+        bgFlatBlock:SetFrameLevel(bgClassSw:GetFrameLevel() + 10)
+        bgFlatBlock:EnableMouse(true)
+        bgFlatBlock:SetScript("OnEnter", function() EllesmereUI.ShowWidgetTooltip(bgSw, "Health Colored Background is on -- the background color comes from the unit's health") end)
+        bgFlatBlock:SetScript("OnLeave", function() EllesmereUI.HideWidgetTooltip() end)
+        -- Updaters run on every refresh: the stops are per-unit and switching the
+        -- selected unit refreshes widgets rather than rebuilding the page.
+        local function UpdateBgDynVis()
+            local on = SVal("bgHealthColored", false)
+            for i, sw in ipairs(bgDynSwatches) do
+                if bgDynUpdaters[i] then bgDynUpdaters[i]() end
+                if on then sw:Show() else sw:Hide() end
+            end
+            if on then
+                bgFlatBlock:Show(); bgSw:SetAlpha(0.3); bgClassSw:SetAlpha(0.3)
+            else
+                bgFlatBlock:Hide()
+                bgSw:SetAlpha(SVal("bgClassColored", false) and 0.3 or 1)
+                bgClassSw:SetAlpha(SVal("bgClassColored", false) and 1 or 0.3)
+            end
+        end
+        RegisterWidgetRefresh(UpdateBgDynVis)
+        UpdateBgDynVis()
     end
     -- Sync icon: Bar Background (right) -- background color + opacity
     if not EllesmereUI._prebuilding then
         local rgn = sharedHealthColorRow._rightRegion
+        -- Health Colored Background's stops travel with the rest of Bar Background.
+        local BG_DYN_STOP_KEYS = { "bgDynamicColor100", "bgDynamicColor50", "bgDynamicColor0" }
         local function ApplyBgTo(keys)
             local src = UNIT_DB_MAP[optState.selectedUnit]()
             local bc = src.customBgColor or { r=17/255, g=17/255, b=17/255 }
             local bgA = src.customBgAlpha or 100
             local bgClass = src.bgClassColored or false
+            local bgHealth = src.bgHealthColored or false
             for _, key in ipairs(keys) do
                 if key ~= optState.selectedUnit then
                     local d = UNIT_DB_MAP[key]()
                     d.customBgColor = { r=bc.r, g=bc.g, b=bc.b }
                     d.customBgAlpha = bgA
                     d.bgClassColored = bgClass
+                    d.bgHealthColored = bgHealth
+                    for _, ck in ipairs(BG_DYN_STOP_KEYS) do
+                        local sc = src[ck]
+                        if sc then d[ck] = { r=sc.r, g=sc.g, b=sc.b } else d[ck] = nil end
+                    end
                 end
             end
             ReloadAndUpdate(); EllesmereUI:RefreshPage()
@@ -321,6 +397,10 @@ function ns.UFO_BuildHealthBarSection(parent, y, ctx)
                     if not colEq(d.customBgColor, src.customBgColor) then return false end
                     if (d.customBgAlpha or 100) ~= (src.customBgAlpha or 100) then return false end
                     if (d.bgClassColored or false) ~= (src.bgClassColored or false) then return false end
+                    if (d.bgHealthColored or false) ~= (src.bgHealthColored or false) then return false end
+                    for _, ck in ipairs(BG_DYN_STOP_KEYS) do
+                        if not colEq(d[ck], src[ck]) then return false end
+                    end
                 end
                 return true
             end,

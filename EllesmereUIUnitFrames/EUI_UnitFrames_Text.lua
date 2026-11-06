@@ -109,11 +109,14 @@ do
         -- never set by this engine; the dynamic modes live in PostUpdateColor
         -- (ns.UF_DynamicHealthColor) behind the unit's healthColorMode, so that
         -- setting is the gate that keeps a dynamic bar tracking every tick.
+        -- Health Colored Background follows health the same way, so it holds
+        -- the same gate open.
         local unitKey = element._euiUnitKey
-        local unitColorMode = unitKey and db.profile[unitKey]
-        unitColorMode = unitColorMode and unitColorMode.healthColorMode
+        local unitS = unitKey and db.profile[unitKey]
+        local unitColorMode = unitS and unitS.healthColorMode
         if event ~= "UNIT_HEALTH" or element.colorSmooth or element.colorThreat
-           or (unitColorMode and unitColorMode ~= "none") then
+           or (unitColorMode and unitColorMode ~= "none")
+           or (unitS and unitS.bgHealthColored) then
             UF_SecretSafeHealthColor(frame, event, unit)
         end
     end
